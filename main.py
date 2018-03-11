@@ -111,6 +111,7 @@ lgr.fit(X_train, y_train)
 
 predictions = lgr.predict(test)
 
-result = pd.DataFrame(data=predictions, index=passenger_ids)
+result = pd.DataFrame(
+    data=predictions, index=passenger_ids, columns=['Survived'])
 
 result.to_csv('results.csv', header=True)
