@@ -113,4 +113,4 @@ predictions = lgr.predict(test)
 
 result = pd.DataFrame(data=predictions, index=passenger_ids)
 
-print(result)
+result.to_csv('results.csv', header=True)
