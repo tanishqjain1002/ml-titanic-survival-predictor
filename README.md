@@ -1,3 +1,3 @@
 # Titanic Survival Predictor
 
-Dataset from www.kaggle.com
+Dataset from https://www.kaggle.com/c/titanic
