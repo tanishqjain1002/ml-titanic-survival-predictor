@@ -92,8 +92,11 @@ test = pd.concat([test, sex_test, embark_test, pclass_test], axis=1)
 # TODO: dont drop Pclass if algorith fails
 df.drop(['Sex', 'Embarked', 'Name', 'Ticket', 'Parch',
          'PassengerId', 'Pclass'], axis=1, inplace=True)
-test.drop(['Sex', 'Embarked', 'Ticket', 'Name', 'Parch',
-           'PassengerId', 'Pclass'], axis=1, inplace=True)
+
+passenger_ids = test['PassengerId']
+
+test.drop(['Sex', 'Embarked', 'Ticket', 'Name',
+           'PassengerId', 'Parch', 'Pclass'], axis=1, inplace=True)
 
 X = df.drop('Survived', axis=1)
 y = df['Survived']
@@ -108,6 +111,6 @@ lgr.fit(X_train, y_train)
 
 predictions = lgr.predict(test)
 
-result = pd.DataFrame(data=predictions)
+result = pd.DataFrame(data=predictions, index=passenger_ids)
 
 print(result)
