@@ -113,5 +113,4 @@ predictions = lgr.predict(test)
 
 result = pd.DataFrame(
     data=predictions, index=passenger_ids, columns=['Survived'])
-
 result.to_csv('results.csv', header=True)
