@@ -1,51 +1,19 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+import os
+from string import Template
+from flask import Flask
+from itertools import *
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
 
+app = Flask(__name__, static_folder="assets")
 
 df = pd.read_csv('train.csv')
 test = pd.read_csv('test.csv')
 
-'''Empty data visualisation'''
-'''A lot of data is missing from the Cabin column and an okish chunk of data missing from the Age column. Better to drop the Cabin column'''
-sns.heatmap(df.isnull(), yticklabels=False, cbar=False, cmap='viridis')
-plt.show()
 df.drop('Cabin', axis=1, inplace=True)
 test.drop('Cabin', axis=1, inplace=True)
-
-'''Male Female distribution'''
-'''Most of the survivors were females'''
-sns.countplot(x='Survived', hue='Sex', data=df)
-plt.show()
-
-'''Passenger Ticketwise distribution'''
-'''Survival rate is in directly proportional to expensive tickets'''
-sns.countplot(x='Survived', hue='Pclass', data=df)
-plt.show()
-
-'''Age distribution'''
-'''Maximum survivors were 20 to 30 yrs old also a good load of kids'''
-sns.distplot(df['Age'].dropna(), kde=False, bins=50)
-plt.show()
-
-'''Relationship distribution'''
-'''No. of relationships is inversely proportional to the Survival rate. Singles survive the most'''
-sns.countplot(x='SibSp', data=df)
-plt.show()
-
-'''Fare distribution'''
-'''Ticket prices were inversely proportional to Survival Rate'''
-df['Fare'].hist(bins=100, figsize=(10, 4))
-plt.show()
-
-
-'''Filling missing ages with mean age of that Passenger class'''
-sns.boxplot(x='Pclass', y='Age', data=df)
-plt.show()
-
 
 def mean_age(cols):
     Age = cols[0]
@@ -62,12 +30,21 @@ def mean_age(cols):
         return Age
 
 
+def generateRows(result, names):
+    returner = []
+    for row, name in zip(result.itertuples(index=True), names):
+        string = "<tr><td>{0}</td><td>{1}</td><td>{2}</td></tr>".format(row[0][0], name, row[1])
+        returner.append(string)
+
+    return "".join(row for row in returner)
+
 df['Age'] = df[['Age', 'Pclass']].apply(mean_age, axis=1)
 test['Age'] = test[['Age', 'Pclass']].apply(mean_age, axis=1)
 
+age_range = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-sns.heatmap(df.isnull(), yticklabels=False, cbar=False, cmap='viridis')
-plt.show()
+for i in df['Age']:
+    age_range[int(i//10)] = age_range[int(i//10)] + 1
 
 '''Drop all remaining NaN'''
 df.dropna(inplace=True)
@@ -88,29 +65,276 @@ pclass_test = pd.get_dummies(test['Pclass'], drop_first=True)
 df = pd.concat([df, sex, embark, pclass], axis=1)
 test = pd.concat([test, sex_test, embark_test, pclass_test], axis=1)
 
-'''Remove Unnecessary columns'''
-# TODO: dont drop Pclass if algorith fails
-df.drop(['Sex', 'Embarked', 'Name', 'Ticket', 'Parch',
-         'PassengerId', 'Pclass'], axis=1, inplace=True)
-
 passenger_ids = test['PassengerId']
+names = test['Name']
 
-test.drop(['Sex', 'Embarked', 'Ticket', 'Name',
-           'PassengerId', 'Parch', 'Pclass'], axis=1, inplace=True)
+test.drop(['Sex', 'Embarked', 'Ticket', 'Name', 'PassengerId', 'Parch', 'Pclass'], axis=1, inplace=True)
 
-X = df.drop('Survived', axis=1)
+X = df.drop(['Sex', 'Embarked', 'Name', 'Ticket', 'Parch',
+         'PassengerId', 'Pclass', 'Survived'], axis=1)
 y = df['Survived']
 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=1, random_state=101)
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=1, random_state=101)
+knn = KNeighborsClassifier()
 
-lgr = LogisticRegression()
+knn.fit(X_train, y_train)
 
-lgr.fit(X_train, y_train)
-
-predictions = lgr.predict(test)
+predictions = knn.predict(test)
 
 result = pd.DataFrame(
-    data=predictions, index=passenger_ids, columns=['Survived'])
-result.to_csv('results.csv', header=True)
+    data=predictions, index=[passenger_ids, names], columns=['Survived'])
+
+relationships = df.SibSp.value_counts().to_dict()
+relation_labels = list(relationships.keys())
+relation_vals = list(relationships.values())
+
+
+params = {
+    'maleCount': len(df[(df.Sex == "male") & (df.Survived == 1)]),
+    'femaleCount': len(df[(df.Sex == "female") & (df.Survived == 1)]),
+    'firstClass': len(df[(df.Pclass == 1) & (df.Survived == 1)]),
+    'secondClass': len(df[(df.Pclass == 2) & (df.Survived == 1)]),
+    'thirdClass': len(df[(df.Pclass == 3) & (df.Survived == 1)]),
+    'relationshipLabels': str(relation_labels),
+    'relationshipValues': str(relation_vals),
+    'ageRange': str(age_range),
+    'rowsWithData': generateRows(result, names)
+}
+
+template = Template('''
+        <!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Titanic</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+        <link rel="stylesheet" href="assets/css/main.css" />
+        <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    </head>
+    <body class="is-preload">
+
+        <!-- Wrapper -->
+            <div id="wrapper">
+
+                <!-- Header -->
+                    <header id="header" class="alt">
+                        <h1>Titanic</h1>
+                        <p>Passenger Survival Predictor using KNN Algorithm</p>
+                    </header>
+
+                <!-- Nav -->
+                    <nav id="nav">
+                        <ul>
+                            <li><a href="#gender">Gender</a></li>
+                            <li><a href="#relationship">Relationship</a></li>
+                            <li><a href="#pclass">Class</a></li>
+                            <li><a href="#age">Age</a></li>
+                            <li><a href="#results">Result</a></li>
+                        </ul>
+                    </nav>
+
+                <!-- Main -->
+                    <div id="main">
+        
+                        <section id="gender" class="main special">
+                            <header class="major">
+                                <h2>Gender Distribution</h2>
+                                <p>Most of the survivors were females</p>
+                            </header>
+
+                            <canvas id="genderCanvas"></canvas>
+                        </section>
+
+                        <section id="relationship" class="main special">
+                            <header class="major">
+                                <h2>Relationship Distribution</h2>
+                                <p>Survival rate is inversely proportional to number of relatives on board</p>
+                            </header>
+
+                            <canvas id="relationCanvas"></canvas>
+                        </section>
+
+                        <section id="pclass" class="main special">
+                            <header class="major">
+                                <h2>Passenger Class Distribution</h2>
+                                <p>Highest number of First class passengers survived</p>
+                            </header>
+
+                            <canvas id="pclassCanvas"></canvas>
+                        </section>
+
+                        <section id="age" class="main special">
+                            <header class="major">
+                                <h2>Age Distribution</h2>
+                                <p>Most survivors were in their 20-30s</p>
+                            </header>
+
+                            <canvas id="ageCanvas"></canvas>
+                        </section>
+
+                        <section id="results" class="main special">
+                            <header class="major">
+                                <h2>Results</h2>
+                            </header>
+
+                            <div class="table-wrapper">
+                                <table>
+                                    <tr>
+                                        <th>Passenger Id</th>
+                                        <th>Name</th>
+                                        <th>Surivived?</th>
+                                    </tr>
+                                    $rowsWithData
+                                </table>
+                            </div>
+                        </section>
+
+                    </div>
+
+                    <footer id="footer">
+                        <section>
+                            <h2>Made by</h2>
+                            <p>By <b>Tanishq Jain</b> (16101A0015), <b>Sanket Udapi</b> (16101A0014) and <b>Amey Nikam</b> (16101A0017)</p>
+                        </section>
+                        <section>
+                            <h2>Dataset</h2>
+                            <p><a href="https://www.kaggle.com/c/titanic/data">Available here</a></p>
+                        </section>
+                    </footer>
+
+            </div>
+
+        <!-- Scripts -->
+            <script src="assets/js/jquery.min.js"></script>
+            <script src="assets/js/jquery.scrollex.min.js"></script>
+            <script src="assets/js/jquery.scrolly.min.js"></script>
+            <script src="assets/js/browser.min.js"></script>
+            <script src="assets/js/breakpoints.min.js"></script>
+            <script src="assets/js/util.js"></script>
+            <script src="assets/js/main.js"></script>
+            <script>
+                const gender = document.getElementById('genderCanvas').getContext('2d')
+
+                new Chart(gender, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Males', 'Females'],
+                        datasets: [{
+                            label: 'Survivors',
+                            data: [$maleCount, $femaleCount],
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                            ],
+                            borderWidth: 1
+                        }]
+                    }
+                })
+
+                const pclass = document.getElementById('pclassCanvas').getContext('2d')
+
+                new Chart(pclass, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['First', 'Second', 'Third'],
+                        datasets: [{
+                            label: 'Survivors',
+                            data: [$firstClass, $secondClass, $thirdClass],
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                            ],
+                            borderWidth: 1
+                        }]
+                    }
+                })
+
+                const relation = document.getElementById('relationCanvas').getContext('2d')
+
+                new Chart(relation, {
+                    type: 'line',
+                    data: {
+                        labels: $relationshipLabels,
+                        datasets: [{
+                            label: "Survivors",
+                            data: $relationshipValues,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    }
+                })
+
+                const age = document.getElementById('ageCanvas').getContext('2d')
+
+                new Chart(age, {
+                    type: 'bar',
+                    data: {
+                        labels: ["0-9", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80+"],
+                        datasets: [{
+                            label: "Survivors",
+                            data: $ageRange,
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 206, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    }
+                })
+
+
+            </script>
+    </body>
+</html>
+    ''').safe_substitute(params)
+
+
+@app.route("/")
+def index():
+    return template
+
+@app.route("/favicon.ico")
+def favicon():
+    return "False"
+
+if __name__ == '__main__':
+    app.run()
