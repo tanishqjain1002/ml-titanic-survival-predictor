@@ -1,6 +1,6 @@
 # Titanic Survival Predictor
 
-### Live Demo: http://dmbi-project.herokuapp.com/
+### Live Demo: http://dmbi-project.herokuapp.com/ [It usually takes 1 minute or 2 to load as heroku puts the app on sleep]
 ### Dataset: https://www.kaggle.com/c/titanic
 
 ![image1](images/title.png)
